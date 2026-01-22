@@ -14,6 +14,7 @@ source ~/.bashrc
 conda activate test
 echo "activate the conda env"
 
+
 # Set up distributed training environment variables, in case of running job array
 # export MASTER_ADDR=$(scontrol show hostnames $SLURM_JOB_NODELIST | head -n 1)
 # # Find a free port dynamically
