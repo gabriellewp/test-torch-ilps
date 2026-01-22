@@ -3,6 +3,7 @@ BERT-based Document Similarity Calculator
 Uses PyTorch and HuggingFace Transformers for information retrieval
 """
 
+import argparse
 import torch
 from transformers import AutoTokenizer, AutoModel
 import numpy as np
@@ -14,13 +15,24 @@ class BERTSimilarity:
     A class for calculating document/sentence similarity using BERT embeddings. 
     """
     
-    def __init__(self, model_name='distilbert-base-uncased'):
+    def __init__(self, model_name='distilbert-base-uncased', wandb_logging=False):
         """
         Initialize the BERT model and tokenizer.
         
         Args:
             model_name (str): Name of the pretrained model to use
+            wandb_logging (bool): Whether to enable Weights & Biases logging
         """
+        self.wandb_logging = wandb_logging
+        
+        if self.wandb_logging:
+            import wandb
+            self.wandb = wandb
+            wandb.init(project="bert-similarity", config={
+                "model_name": model_name,
+                "device": "cuda" if torch.cuda.is_available() else "cpu"
+            })
+        
         print(f"Loading model:  {model_name}...")
         self.tokenizer = AutoTokenizer. from_pretrained(model_name)
         self.model = AutoModel.from_pretrained(model_name)
@@ -28,6 +40,9 @@ class BERTSimilarity:
         self.model.to(self.device)
         self.model.eval()
         print(f"Model loaded successfully on {self.device}")
+        
+        if self.wandb_logging:
+            wandb.config.update({"model_loaded": True})
     
     def encode(self, texts):
         """
@@ -86,6 +101,10 @@ class BERTSimilarity:
         emb1 = self.encode(text1)
         emb2 = self.encode(text2)
         similarity = cosine_similarity(emb1, emb2)[0][0]
+        
+        if self.wandb_logging:
+            self.wandb.log({"pairwise_similarity": similarity})
+        
         return similarity
     
     def find_most_similar(self, query, documents, top_k=5):
@@ -114,15 +133,27 @@ class BERTSimilarity:
             for idx in top_indices
         ]
         
+        if self.wandb_logging:
+            # Log average similarity and top similarity score
+            self.wandb.log({
+                "avg_similarity": np.mean(similarities),
+                "max_similarity": np.max(similarities),
+                "top_k": top_k,
+                "num_documents": len(documents)
+            })
+        
         return results
 
 
-def main():
+def main(wandb_logging=False):
     """
     Example usage of BERTSimilarity class
+    
+    Args:
+        wandb_logging (bool): Whether to enable Weights & Biases logging
     """
     # Initialize the similarity calculator
-    bert_sim = BERTSimilarity()
+    bert_sim = BERTSimilarity(wandb_logging=wandb_logging)
     
     print("\n" + "="*80)
     print("EXAMPLE 1: Pairwise Similarity")
@@ -189,7 +220,23 @@ def main():
         print("Top 3 matches:")
         for rank, (idx, score, doc) in enumerate(results, 1):
             print(f"  {rank}. [{score:.4f}] {doc}")
+    
+    if wandb_logging:
+        import wandb
+        wandb.finish()
 
 
 if __name__ == "__main__":
-    main()
+    parser = argparse.ArgumentParser(description="BERT-based document similarity calculator")
+    parser.add_argument(
+        '--wandb_logging',
+        type=lambda x: x.lower() == 'true',
+        default=False,
+        help='Enable Weights & Biases logging (True/False)'
+    )
+    
+    args = parser.parse_args()
+    
+    print(f"Weights & Biases logging: {'Enabled' if args.wandb_logging else 'Disabled'}")
+    
+    main(wandb_logging=args.wandb_logging)
