@@ -189,7 +189,7 @@ Examples completed successfully!
 
 - **GPU Acceleration**: Automatically detects and uses CUDA-enabled GPU if available for faster inference.
 
-- **Efficient Batching**: Documents can be encoded in batches for better performance on large collections.
+- **Batch Processing**: The `encode_texts` method processes documents in batches (default batch size of 8) for better performance on large collections.
 
 ## Customization
 

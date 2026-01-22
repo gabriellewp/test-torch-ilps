@@ -88,20 +88,54 @@ class BERTSimilarityCalculator:
         # Convert to numpy and return
         return mean_pooled.cpu().numpy()
     
-    def encode_texts(self, texts: List[str]) -> np.ndarray:
+    def encode_texts(self, texts: List[str], batch_size: int = 8) -> np.ndarray:
         """
-        Encode multiple texts into BERT embedding vectors.
+        Encode multiple texts into BERT embedding vectors using batch processing.
         
         Args:
             texts (List[str]): List of texts to encode.
+            batch_size (int): Number of texts to process in each batch. Default is 8.
         
         Returns:
             np.ndarray: Array of embedding vectors, shape (n_texts, embedding_dim).
         """
         embeddings = []
-        for text in texts:
-            embedding = self.encode_text(text)
-            embeddings.append(embedding)
+        
+        # Process texts in batches for efficiency
+        for i in range(0, len(texts), batch_size):
+            batch_texts = texts[i:i + batch_size]
+            
+            # Tokenize the batch
+            encoded_input = self.tokenizer(
+                batch_texts,
+                padding=True,
+                truncation=True,
+                max_length=512,
+                return_tensors="pt"
+            )
+            
+            # Move to the same device as the model
+            encoded_input = {key: val.to(self.device) for key, val in encoded_input.items()}
+            
+            # Get BERT embeddings
+            with torch.no_grad():
+                model_output = self.model(**encoded_input)
+            
+            # Use mean pooling to get sentence embeddings
+            attention_mask = encoded_input['attention_mask']
+            token_embeddings = model_output.last_hidden_state
+            
+            # Expand attention mask to match token embeddings dimensions
+            input_mask_expanded = attention_mask.unsqueeze(-1).expand(token_embeddings.size()).float()
+            
+            # Sum embeddings and divide by the sum of mask values
+            sum_embeddings = torch.sum(token_embeddings * input_mask_expanded, dim=1)
+            sum_mask = torch.clamp(input_mask_expanded.sum(dim=1), min=1e-9)
+            mean_pooled = sum_embeddings / sum_mask
+            
+            # Add to embeddings list
+            embeddings.append(mean_pooled.cpu().numpy())
+        
         return np.vstack(embeddings)
     
     def calculate_similarity(self, text1: str, text2: str) -> float:
